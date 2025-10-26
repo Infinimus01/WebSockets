@@ -1,54 +1,54 @@
 const express = require("express");
 const http = require("http");
-const WebSocket = require("ws"); // use standard naming
+const WebSocket = require("ws");
 
 const app = express();
 const PORT = 8080;
 
 // Serve index.html
 app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/index.html"); // fixed req -> res
+  res.sendFile(__dirname + "/index.html");
 });
 
-// Create HTTP server
 const server = http.createServer(app);
-
-// Create WebSocket server
 const wss = new WebSocket.Server({ server });
 
-// Handle WebSocket connections
 wss.on("connection", (ws) => {
   console.log("Client connected");
 
-  // // Receive messages from client
-  // ws.on("message", (message) => {
-  //   console.log("Received:", message);
-
-  //   // Broadcast message to all clients
-  //   wss.clients.forEach((client) => {
-  //     if (client.readyState === WebSocket.OPEN) {
-  //       client.send(message);
-  //     }
-  //   });
-  // });
   ws.on("message", (message) => {
-    // If message is Buffer, convert to string
     if (message instanceof Buffer) {
       message = message.toString();
     }
-  
-    console.log("Received:", message);
-  
-    // Broadcast
+
+    let parsed;
+    try {
+      parsed = JSON.parse(message);
+    } catch (err) {
+      console.log("Invalid JSON:", message);
+      return;
+    }
+
+    // 🕒 Generate timestamp
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    parsed.timestamp = timestamp; // attach timestamp to message
+
+    // ✅ Correct console log
+    console.log(`[${parsed.timestamp}] [${parsed.username}]: ${parsed.message}`);
+
+    // Broadcast to all clients
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
+        client.send(JSON.stringify(parsed));
       }
     });
   });
-  
 
-  // Detect client disconnect
   ws.on("close", () => console.log("Client disconnected"));
 
   // Heartbeat
@@ -56,7 +56,7 @@ wss.on("connection", (ws) => {
   ws.on("pong", () => (ws.isAlive = true));
 });
 
-// Heartbeat check every 30 seconds
+// Heartbeat check every 30s
 setInterval(() => {
   wss.clients.forEach((ws) => {
     if (!ws.isAlive) return ws.terminate();
@@ -65,7 +65,6 @@ setInterval(() => {
   });
 }, 30000);
 
-// Start server
 server.listen(PORT, () => {
   console.log(`Server is running on PORT ${PORT}`);
 });
